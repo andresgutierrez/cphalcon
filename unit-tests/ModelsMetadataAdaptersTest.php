@@ -9,7 +9,7 @@
   | This source file is subject to the New BSD License that is bundled     |
   | with this package in the file docs/LICENSE.txt.                        |
   |                                                                        |
-  | If you did not receive a copy of the license and are unable to         |
+  | If you did not receive a copy of the licnse and are unable to         |
   | obtain it through the world-wide-web, please send an email             |
   | to license@phalconphp.com so we can send you a copy immediately.       |
   +------------------------------------------------------------------------+
@@ -18,12 +18,13 @@
   +------------------------------------------------------------------------+
 */
 
-class ModelsMetadataAdaptersTest extends PHPUnit_Framework_TestCase {
+require_once 'helpers/xcache.php';
 
-	private $_manager;
+class ModelsMetadataAdaptersTest extends PHPUnit_Framework_TestCase
+{
 
 	private $_data = array(
-		'phalcon_testrobots' => array(
+		'meta-robots-robots' => array(
 			0 => array(
 				0 => 'id',
 				1 => 'name',
@@ -45,80 +46,110 @@ class ModelsMetadataAdaptersTest extends PHPUnit_Framework_TestCase {
 				3 => 'year',
 			),
 			4 => array(
-				'id' => 'int(10) unsigned',
-				'name' => 'varchar(70)',
-				'type' => 'varchar(32)',
-				'year' => 'int(11)',
+				'id' => 0,
+				'name' => 2,
+				'type' => 2,
+				'year' => 0,
 			),
 			5 => array(
 				'id' => true,
 				'year' => true,
 			),
 			8 => 'id',
+			9 => array(
+				'id' => 1,
+				'name' => 2,
+				'type' => 2,
+				'year' => 1,
+			),
+			10 => array(),
+			11 => array()
 		),
+		'map-robots' => array(
+			0 => null,
+			1 => null,
+		)
 	);
 
-	public function setUp(){
-
-		require 'unit-tests/config.db.php';
-
-		Phalcon_Db_Pool::setDefaultDescriptor($configMysql);
-		$this->assertTrue(Phalcon_Db_Pool::hasDefaultDescriptor());
-
-		$this->_manager = new Phalcon_Model_Manager();
-		$this->_manager->setModelsDir('unit-tests/models/');
+	public function __construct()
+	{
+		spl_autoload_register(array($this, 'modelsAutoloader'));
 	}
 
-	public function testMetadataMemory(){
+	public function __destruct()
+	{
+		spl_autoload_unregister(array($this, 'modelsAutoloader'));
+	}
 
-		$manager = $this->_manager;
+	public function modelsAutoloader($className)
+	{
+		if (file_exists('unit-tests/models/' . $className . '.php')) {
+			require 'unit-tests/models/' . $className . '.php';
+		}
+	}
 
-		$memoryMetaData = new Phalcon_Model_Metadata('Memory');
+	protected function _getDI()
+	{
 
-		$manager->setMetaData($memoryMetaData);
+		Phalcon\DI::reset();
 
-		$metaData = $manager->getMetaData();
-		$this->assertEquals(get_class($metaData), 'Phalcon_Model_MetaData');
+		$di = new Phalcon\DI();
+
+		$di->set('modelsManager', function(){
+			return new Phalcon\Mvc\Model\Manager();
+		});
+
+		$di->set('db', function(){
+			require 'unit-tests/config.db.php';
+			return new Phalcon\Db\Adapter\Pdo\Mysql($configMysql);
+		});
+
+		return $di;
+	}
+
+	public function testMetadataMemory()
+	{
+
+		$di = $this->_getDI();
+
+		$di->set('modelsMetadata', function(){
+			return new Phalcon\Mvc\Model\Metadata\Memory();
+		});
+
+		$metaData = $di->getShared('modelsMetadata');
 
 		$metaData->reset();
 
 		$this->assertTrue($metaData->isEmpty());
-
-		$success = $manager->load('Robots');
-		$this->assertTrue($success);
 
 		Robots::findFirst();
 
 		$this->assertFalse($metaData->isEmpty());
 
+		Robots::findFirst();
+
 	}
 
-	public function testMetadataSession(){
-
-		$manager = $this->_manager;
+	public function testMetadataSession()
+	{
 
 		@session_start();
 
-		$config = new stdClass();
-		$config->suffix = 'my-local-app';
+		$di = $this->_getDI();
 
-		$sessionMetaData = new Phalcon_Model_Metadata('Session', $config);
+		$di->set('modelsMetadata', function(){
+			return new Phalcon\Mvc\Model\Metadata\Session(array(
+				'prefix' => 'my-local-app'
+			));
+		});
 
-		$manager->setMetaData($sessionMetaData);
-
-		$metaData = $manager->getMetaData();
-		$this->assertEquals(get_class($metaData), 'Phalcon_Model_MetaData');
+		$metaData = $di->getShared('modelsMetadata');
 
 		$metaData->reset();
 
 		$this->assertTrue($metaData->isEmpty());
 
-		$success = $manager->load('Robots');
-		$this->assertTrue($success);
-
 		Robots::findFirst();
-
-		$metaData->storeMetaData();
 
 		$expectedSession = array(
 			'$PMM$my-local-app' => $this->_data
@@ -128,72 +159,110 @@ class ModelsMetadataAdaptersTest extends PHPUnit_Framework_TestCase {
 
 		$this->assertFalse($metaData->isEmpty());
 
+		Robots::findFirst();
+
 	}
 
-	public function testMetadataApc(){
+	public function testMetadataApc()
+	{
+
+		if (!function_exists('apc_fetch')) {
+			$this->markTestSkipped('apc extension is not loaded');
+			return false;
+		}
 
 		apc_delete('$PMM$my-local-app');
 
-		$manager = $this->_manager;
+		$di = $this->_getDI();
 
-		$config = new stdClass();
-		$config->suffix = 'my-local-app';
-		$config->lifetime = 60;
+		$di->set('modelsMetadata', function(){
+			return new Phalcon\Mvc\Model\Metadata\Apc(array(
+				'prefix' => 'my-local-app',
+				'lifetime' => 60
+			));
+		});
 
-		$apcMetaData = new Phalcon_Model_Metadata('Apc', $config);
-
-		$manager->setMetaData($apcMetaData);
-
-		$metaData = $manager->getMetaData();
-		$this->assertEquals(get_class($metaData), 'Phalcon_Model_MetaData');
+		$metaData = $di->getShared('modelsMetadata');
 
 		$metaData->reset();
 
 		$this->assertTrue($metaData->isEmpty());
 
-		$success = $manager->load('Robots');
-		$this->assertTrue($success);
-
 		Robots::findFirst();
 
-		$metaData->storeMetaData();
-
-		$this->assertEquals(apc_fetch('$PMM$my-local-app'), $this->_data);
+		$this->assertEquals(apc_fetch('$PMM$my-local-appmeta-robots-robots'), $this->_data['meta-robots-robots']);
+		$this->assertEquals(apc_fetch('$PMM$my-local-appmap-robots'), $this->_data['map-robots']);
 
 		$this->assertFalse($metaData->isEmpty());
 
+		Robots::findFirst();
+
 	}
 
-	public function testMetadataConfig(){
+	public function testMetadataXcache()
+	{
 
-		apc_delete('$PMM$my-local-app');
+		if (!function_exists('xcache_get')) {
+			$this->markTestSkipped('xcache extension is not loaded');
+			return false;
+		}
 
-		$options = new stdClass();
-		$options->metadata = new stdClass();
-		$options->metadata->adapter = 'Apc';
-		$options->metadata->suffix = 'my-local-app';
-		$options->metadata->lifetime = 60;
+		xcache_unset('$PMM$my-local-app');
 
-		$manager = new Phalcon_Model_Manager($options);
+		$di = $this->_getDI();
 
-		$metaData = $manager->getMetaData();
-		$this->assertEquals(get_class($metaData), 'Phalcon_Model_MetaData');
+		$di->set('modelsMetadata', function(){
+			return new Phalcon\Mvc\Model\Metadata\Xcache(array(
+				'prefix' => 'my-local-app',
+				'lifetime' => 60
+			));
+		});
+
+		$metaData = $di->getShared('modelsMetadata');
 
 		$metaData->reset();
 
 		$this->assertTrue($metaData->isEmpty());
 
-		$success = $manager->load('Robots');
-		$this->assertTrue($success);
-
 		Robots::findFirst();
 
-		$metaData->storeMetaData();
-
-		$this->assertEquals(apc_fetch('$PMM$my-local-app'), $this->_data);
+		$this->assertEquals(apc_fetch('$PMM$my-local-appmeta-robots-robots'), $this->_data['meta-robots-robots']);
+		$this->assertEquals(apc_fetch('$PMM$my-local-appmap-robots'), $this->_data['map-robots']);
 
 		$this->assertFalse($metaData->isEmpty());
 
+		Robots::findFirst();
+
+	}
+
+	public function testMetadataFiles()
+	{
+
+		$di = $this->_getDI();
+
+		$di->set('modelsMetadata', function(){
+			return new Phalcon\Mvc\Model\Metadata\Files(array(
+				'metaDataDir' => 'unit-tests/cache/',
+			));
+		});
+
+		@unlink('unit-tests/cache/meta-robots-robots.php');
+		@unlink('unit-tests/cache/map-robots.php');
+
+		$metaData = $di->getShared('modelsMetadata');
+
+		$metaData->reset();
+
+		$this->assertTrue($metaData->isEmpty());
+
+		Robots::findFirst();
+
+		$this->assertEquals(require 'unit-tests/cache/meta-robots-robots.php', $this->_data['meta-robots-robots']);
+		$this->assertEquals(require 'unit-tests/cache/map-robots.php', $this->_data['map-robots']);
+
+		$this->assertFalse($metaData->isEmpty());
+
+		Robots::findFirst();
 	}
 
 }

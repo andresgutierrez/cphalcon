@@ -18,26 +18,105 @@
   +------------------------------------------------------------------------+
 */
 
-class ModelsCalculationsTest extends PHPUnit_Framework_TestCase {
+class ModelsCalculationsTest extends PHPUnit_Framework_TestCase
+{
 
-	public function testCalculations(){
+	public function __construct()
+	{
+		spl_autoload_register(array($this, 'modelsAutoloader'));
+	}
 
-		$config = array(
-			'adapter' => 'Mysql',
-			'host' => '127.0.0.1',
-			'username' => 'root',
-			'password' => '',
-			'name' => 'phalcon_test'
-		);
+	public function __destruct()
+	{
+		spl_autoload_unregister(array($this, 'modelsAutoloader'));
+	}
 
-		Phalcon_Db_Pool::setDefaultDescriptor($config);
-		$this->assertTrue(Phalcon_Db_Pool::hasDefaultDescriptor());
+	public function modelsAutoloader($className)
+	{
+		if (file_exists('unit-tests/models/'.$className.'.php')) {
+			require 'unit-tests/models/'.$className.'.php';
+		}
+	}
 
-		$manager = new Phalcon_Model_Manager();
-		$manager->setModelsDir('unit-tests/models/');
+	protected function _getDI()
+	{
 
-		$success = $manager->load('Personnes');
-		$this->assertTrue($success);
+		Phalcon\DI::reset();
+
+		$di = new Phalcon\DI();
+
+		$di->set('modelsManager', function(){
+			return new Phalcon\Mvc\Model\Manager();
+		});
+
+		$di->set('modelsMetadata', function(){
+			return new Phalcon\Mvc\Model\Metadata\Memory();
+		});
+
+		return $di;
+	}
+
+	public function testCalculationsMysql()
+	{
+		require 'unit-tests/config.db.php';
+		if (empty($configMysql)) {
+			$this->markTestSkipped("Skipped");
+			return;
+		}
+
+		$di = $this->_getDI();
+
+		$di->set('db', function(){
+			require 'unit-tests/config.db.php';
+			return new Phalcon\Db\Adapter\Pdo\Mysql($configMysql);
+		});
+
+		$this->_executeTestsNormal($di);
+		$this->_executeTestsRenamed($di);
+
+	}
+
+	public function testCalculationsPostgresql()
+	{
+		require 'unit-tests/config.db.php';
+		if (empty($configPostgresql)) {
+			$this->markTestSkipped("Skipped");
+			return;
+		}
+
+		$di = $this->_getDI();
+
+		$di->set('db', function(){
+			require 'unit-tests/config.db.php';
+			return new Phalcon\Db\Adapter\Pdo\Postgresql($configPostgresql);
+		});
+
+		$this->_executeTestsNormal($di);
+		$this->_executeTestsRenamed($di);
+
+	}
+
+	public function testCalculationsSqlite()
+	{
+		require 'unit-tests/config.db.php';
+		if (empty($configSqlite)) {
+			$this->markTestSkipped("Skipped");
+			return;
+		}
+
+		$di = $this->_getDI();
+
+		$di->set('db', function(){
+			require 'unit-tests/config.db.php';
+			return new Phalcon\Db\Adapter\Pdo\Sqlite($configSqlite);
+		});
+
+		$this->_executeTestsNormal($di);
+		$this->_executeTestsRenamed($di);
+	}
+
+	protected function _executeTestsNormal()
+	{
 
 		//Count calculations
 		$rowcount = Personnes::count();
@@ -92,7 +171,7 @@ class ModelsCalculationsTest extends PHPUnit_Framework_TestCase {
 
 		//Average
 		$total = Personnes::average(array("column" => "cupo"));
-		$this->assertEquals(456452.302752, $total);
+		$this->assertEquals(456452.30, sprintf("%.2f", $total));
 
 		$total = Personnes::average(array("column" => "cupo", "conditions" => "estado='I'"));
 		$this->assertEquals(283510.00, $total);
@@ -100,9 +179,9 @@ class ModelsCalculationsTest extends PHPUnit_Framework_TestCase {
 		$group = Personnes::average(array("column" => "cupo", "group" => "estado"));
 		$this->assertEquals(2, count($group));
 
-		$results = array('A' => 456611.111111, 'I' => 283510.00);
+		$results = array('A' => 456611.11, 'I' => 283510.00);
 		foreach($group as $row){
-			$this->assertEquals($results[$row->estado], $row->average);
+			$this->assertEquals($results[$row->estado], sprintf("%.2f", $row->average));
 		}
 
 		$group = Personnes::average(array("column" => "cupo", "group" => "ciudad_id", "order" => "average DESC"));
@@ -145,6 +224,119 @@ class ModelsCalculationsTest extends PHPUnit_Framework_TestCase {
 		$this->assertEquals($group[0]->minimum, 127591);
 
 		$group = Personnes::minimum(array("column" => "ciudad_id", "group" => "estado", "order" => "minimum ASC"));
+		$this->assertEquals($group[0]->minimum, 20404);
+
+	}
+
+	protected function _executeTestsRenamed()
+	{
+
+		//Count calculations
+		$rowcount = Pessoas::count();
+		$this->assertEquals($rowcount, 2180);
+
+		$rowcount = Pessoas::count(array('distinct' => 'estado'));
+		$this->assertEquals($rowcount, 2);
+
+		$rowcount = Pessoas::count("estado='A'");
+		$this->assertEquals($rowcount, 2178);
+
+		$group = Pessoas::count(array("group" => "estado"));
+		$this->assertEquals(2, count($group));
+
+		$group = Pessoas::count(array("group" => "estado", "order" => "estado"));
+		$this->assertEquals(2, count($group));
+
+		$results = array('A' => 2178, 'I' => 2);
+		foreach($group as $row){
+			$this->assertEquals($results[$row->estado], $row->rowcount);
+		}
+
+		$this->assertEquals($group[0]->rowcount, 2178);
+		$this->assertEquals($group[1]->rowcount, 2);
+
+		$group = Pessoas::count(array("group" => "estado"));
+		$this->assertEquals(2, count($group));
+
+		$group = Pessoas::count(array("group" => "cidadeId"));
+		$this->assertEquals(285, count($group));
+
+		$group = Pessoas::count(array("group" => "cidadeId", "order" => "rowcount DESC"));
+		$this->assertEquals($group[0]->rowcount, 727);
+
+		//Summatory
+		$total = Pessoas::sum(array("column" => "credito"));
+		$this->assertEquals(995066020.00, $total);
+
+		$total = Pessoas::sum(array("column" => "credito", "conditions" => "estado='I'"));
+		$this->assertEquals(567020.00, $total);
+
+		$group = Pessoas::sum(array("column" => "credito", "group" => "estado"));
+		$this->assertEquals(2, count($group));
+
+		$results = array('A' => 994499000.00, 'I' => 567020.00);
+		foreach($group as $row){
+			$this->assertEquals($results[$row->estado], $row->sumatory);
+		}
+
+		$group = Pessoas::sum(array("column" => "credito", "group" => "cidadeId", "order" => "sumatory DESC"));
+		$this->assertEquals($group[0]->sumatory, 358467690.00);
+
+		//Average
+		$total = Pessoas::average(array("column" => "credito"));
+		$this->assertEquals(456452.30, sprintf("%.2f", $total));
+
+		$total = Pessoas::average(array("column" => "credito", "conditions" => "estado='I'"));
+		$this->assertEquals(283510.00, $total);
+
+		$group = Pessoas::average(array("column" => "credito", "group" => "estado"));
+		$this->assertEquals(2, count($group));
+
+		$results = array('A' => 456611.11, 'I' => 283510.00);
+		foreach($group as $row){
+			$this->assertEquals($results[$row->estado], sprintf("%.2f", $row->average));
+		}
+
+		$group = Pessoas::average(array("column" => "credito", "group" => "cidadeId", "order" => "average DESC"));
+		$this->assertEquals($group[0]->average, 996200.00);
+
+		//Maximum
+		$max = Pessoas::maximum(array("column" => "cidadeId"));
+		$this->assertEquals($max, 302172);
+
+		$max = Pessoas::maximum(array("column" => "cidadeId", "conditions" => "estado='I'"));
+		$this->assertEquals($max, 127591);
+
+		$group = Pessoas::maximum(array("column" => "cidadeId", "group" => "estado"));
+		$this->assertEquals(2, count($group));
+
+		$results = array('A' => 302172, 'I' => 127591);
+		foreach($group as $row){
+			$this->assertEquals($results[$row->estado], $row->maximum);
+		}
+
+		$group = Pessoas::maximum(array("column" => "cidadeId", "group" => "estado", "order" => "maximum DESC"));
+		$this->assertEquals($group[0]->maximum, 302172);
+
+		//Minimum
+		$max = Pessoas::minimum(array("column" => "cidadeId"));
+		$this->assertEquals($max, 20404);
+
+		$max = Pessoas::minimum(array("column" => "cidadeId", "conditions" => "estado='I'"));
+		$this->assertEquals($max, 127591);
+
+		$group = Pessoas::minimum(array("column" => "cidadeId", "group" => "estado"));
+		$this->assertEquals(2, count($group));
+
+		$results = array('A' => 20404, 'I' => 127591);
+		foreach($group as $row){
+			$this->assertEquals($results[$row->estado], $row->minimum);
+		}
+
+		$group = Pessoas::minimum(array("column" => "cidadeId", "group" => "estado", "order" => "minimum DESC"));
+		$this->assertEquals($group[0]->minimum, 127591);
+
+		$group = Pessoas::minimum(array("column" => "cidadeId", "group" => "estado", "order" => "minimum ASC"));
 		$this->assertEquals($group[0]->minimum, 20404);
 
 	}

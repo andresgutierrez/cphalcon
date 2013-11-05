@@ -1,8 +1,10 @@
 <?php
 
-class Robots extends Phalcon_Model_Base {
+class Robots extends Phalcon\Mvc\Model
+{
 
-	function initialize(){
+	public function initialize()
+	{
 		$this->hasMany('id', 'RobotsParts', 'robots_id', array(
 			'foreignKey' => true
 		));

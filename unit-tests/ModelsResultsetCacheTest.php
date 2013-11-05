@@ -18,140 +18,297 @@
   +------------------------------------------------------------------------+
 */
 
-class ModelsResultsetCacheTest extends PHPUnit_Framework_TestCase {
+class ModelsResultsetCacheTest extends PHPUnit_Framework_TestCase
+{
 
-	private function _prepareTest(){
+	public function __construct()
+	{
+		spl_autoload_register(array($this, 'modelsAutoloader'));
+	}
 
+	public function __destruct()
+	{
+		spl_autoload_unregister(array($this, 'modelsAutoloader'));
+	}
+
+	public function modelsAutoloader($className)
+	{
+		if (file_exists('unit-tests/models/'.$className.'.php')) {
+			require 'unit-tests/models/'.$className.'.php';
+		}
+	}
+
+	protected function _getDI()
+	{
+
+		Phalcon\DI::reset();
+
+		$di = new Phalcon\DI();
+
+		$di->set('modelsManager', function(){
+			return new Phalcon\Mvc\Model\Manager();
+		});
+
+		$di->set('modelsMetadata', function(){
+			return new Phalcon\Mvc\Model\Metadata\Memory();
+		});
+
+		return $di;
+	}
+
+	public function setUp()
+	{
+		$iterator = new DirectoryIterator('unit-tests/cache/');
+		foreach ($iterator as $item) {
+			if (!$item->isDir()) {
+				unlink($item->getPathname());
+			}
+		}
+	}
+
+	private function _prepareTestMysql()
+	{
 		require 'unit-tests/config.db.php';
+		if (empty($configMysql)) {
+			return null;
+		}
 
-		Phalcon_Db_Pool::setDefaultDescriptor($configMysql);
-		$this->assertTrue(Phalcon_Db_Pool::hasDefaultDescriptor());
+		$di = $this->_getDI();
 
+		$di->set('db', function(){
+			require 'unit-tests/config.db.php';
+			return new Phalcon\Db\Adapter\Pdo\Mysql($configMysql);
+		});
+
+		return $di;
 	}
 
-	public function testCacheResultsetDirect(){
+	private function _prepareTestPostgresql()
+	{
+		require 'unit-tests/config.db.php';
+		if (empty($configPostgresql)) {
+			return null;
+		}
 
-		$this->_prepareTest();
+		$di = $this->_getDI();
 
-		@unlink('unit-tests/cache/1964662c8e19b91db1ac97541493273e');
+		$di->set('db', function(){
+			require 'unit-tests/config.db.php';
+			return new Phalcon\Db\Adapter\Pdo\Postgresql($configPostgresql);
+		});
 
-		$manager = new Phalcon_Model_Manager();
-		$manager->setModelsDir('unit-tests/models/');
+		return $di;
+	}
 
-		$success = $manager->load('Robots');
-		$this->assertTrue($success);
+	private function _prepareTestSqlite()
+	{
+		require 'unit-tests/config.db.php';
+		if (empty($configSqlite)) {
+			return null;
+		}
 
-		$cache = Phalcon_Cache::factory('Data', 'File', null, array(
-			'cacheDir' => 'unit-tests/cache/'
+		$di = $this->_getDI();
+
+		$di->set('db', function(){
+			require 'unit-tests/config.db.php';
+			return new Phalcon\Db\Adapter\Pdo\Sqlite($configSqlite);
+		});
+
+		return $di;
+	}
+
+	protected function _testCacheDefaultDI($di)
+	{
+
+		$di->set('modelsCache', function(){
+			$frontCache = new Phalcon\Cache\Frontend\Data();
+			return new Phalcon\Cache\Backend\File($frontCache, array(
+				'cacheDir' => 'unit-tests/cache/'
+			));
+		}, true);
+
+		$robots = Robots::find(array(
+			'cache' => array('key' => 'some'),
+			'order' => 'id'
 		));
-		$this->assertInstanceOf('Phalcon_Cache_Backend_File', $cache);
-
-		$manager->setCache($cache);
-		$this->assertInstanceOf('Phalcon_Cache_Backend_File', $manager->getCache());
-
-		$robots = Robots::find(array('cache' => 60, 'order' => 'id'));
 		$this->assertEquals(count($robots), 3);
 		$this->assertTrue($robots->isFresh());
 
-		$robots = Robots::find(array('cache' => 60, 'order' => 'id'));
+		$robots = Robots::find(array(
+			'cache' => array('key' => 'some'),
+			'order' => 'id'
+		));
 		$this->assertEquals(count($robots), 3);
 		$this->assertFalse($robots->isFresh());
 
 	}
 
-	public function testCacheResultsetConfig(){
+	protected function _testCacheDefaultDIBindings($di)
+	{
 
-		$this->_prepareTest();
+		$di->set('modelsCache', function(){
+			$frontCache = new Phalcon\Cache\Frontend\Data();
+			return new Phalcon\Cache\Backend\File($frontCache, array(
+				'cacheDir' => 'unit-tests/cache/'
+			));
+		}, true);
 
-		Phalcon_Model_Manager::reset();
-
-		@unlink('unit-tests/cache/1964662c8e19b91db1ac97541493273e');
-
-		$config = new stdClass();
-		$config->cache = new stdClass();
-		$config->cache->adapter = 'File';
-		$config->cache->cacheDir = 'unit-tests/cache/';
-
-		$manager = new Phalcon_Model_Manager($config);
-		$manager->setModelsDir('unit-tests/models/');
-
-		$success = $manager->load('Robots');
-		$this->assertTrue($success);
-
-		$this->assertInstanceOf('Phalcon_Cache_Backend_File', $manager->getCache());
-
-		$robots = Robots::find(array('cache' => 60, 'order' => 'id'));
+		$robots = Robots::find(array(
+			'cache' => array('key' => 'some'),
+			'conditions' => 'id > :id1: and id < :id2:',
+			'bind' => array('id1' => 0, 'id2' => 4),
+			'order' => 'id'
+		));
 		$this->assertEquals(count($robots), 3);
 		$this->assertTrue($robots->isFresh());
 
-		$robots = Robots::find(array('cache' => 60, 'order' => 'id'));
+		$robots = Robots::find(array(
+			'cache' => array('key' => 'some'),
+			'conditions' => 'id > :id1: and id < :id2:',
+			'bind' => array('id1' => 0, 'id2' => 4),
+			'order' => 'id'
+		));
 		$this->assertEquals(count($robots), 3);
 		$this->assertFalse($robots->isFresh());
 
 	}
 
-	public function testCacheResultsetNoLifetime(){
+	protected function _testCacheOtherService($di)
+	{
 
-		$this->_prepareTest();
+		$di->set('otherCache', function(){
+			$frontCache = new Phalcon\Cache\Frontend\Data();
+			return new Phalcon\Cache\Backend\File($frontCache, array(
+				'cacheDir' => 'unit-tests/cache/'
+			));
+		}, true);
 
-		Phalcon_Model_Manager::reset();
-
-		@unlink('unit-tests/cache/1964662c8e19b91db1ac97541493273e');
-
-		$config = new stdClass();
-		$config->cache = new stdClass();
-		$config->cache->adapter = 'File';
-		$config->cache->cacheDir = 'unit-tests/cache/';
-
-		$manager = new Phalcon_Model_Manager($config);
-		$manager->setModelsDir('unit-tests/models/');
-
-		$success = $manager->load('Robots');
-		$this->assertTrue($success);
-
-		$this->assertInstanceOf('Phalcon_Cache_Backend_File', $manager->getCache());
-
-		$robots = Robots::find(array('cache' => true, 'order' => 'id'));
+		$robots = Robots::find(array(
+			'cache' => array(
+				'key' => 'other-some',
+				'lifetime' => 60,
+				'service' => 'otherCache'
+			),
+			'order' => 'id'
+		));
 		$this->assertEquals(count($robots), 3);
 		$this->assertTrue($robots->isFresh());
 
-		$robots = Robots::find(array('cache' => true, 'order' => 'id'));
+		$robots = Robots::find(array(
+			'cache' => array(
+				'key' => 'other-some',
+				'lifetime' => 60,
+				'service' => 'otherCache'
+			),
+			'order' => 'id'
+		));
 		$this->assertEquals(count($robots), 3);
 		$this->assertFalse($robots->isFresh());
 
+		$this->assertEquals($robots->getCache()->getLastKey(), 'other-some');
+
+		$this->assertEquals($robots->getCache()->queryKeys(), array(
+			0 => 'other-some',
+		));
 	}
 
-	public function testCacheResultsetConfigKey(){
+	public function testCacheDefaultDIMysql()
+	{
+		$di = $this->_prepareTestMysql();
+		if ($di) {
+			$this->_testCacheDefaultDI($di);
+		}
+		else {
+			$this->markTestSkipped("Skipped");
+		}
+	}
 
-		$this->_prepareTest();
+	public function testCacheDefaultDIPostgresql()
+	{
+		$di = $this->_prepareTestPostgresql();
+		if ($di) {
+			$this->_testCacheDefaultDI($di);
+		}
+		else {
+			$this->markTestSkipped("Skipped");
+		}
+	}
 
-		Phalcon_Model_Manager::reset();
+	public function testCacheDefaultDISqlite()
+	{
+		$di = $this->_prepareTestSqlite();
+		if ($di) {
+			$this->_testCacheDefaultDI($di);
+		}
+		else {
+			$this->markTestSkipped("Skipped");
+		}
+	}
 
-		@unlink('unit-tests/cache/mykey');
+	public function testCacheDefaultDIBindingsMysql()
+	{
+		$di = $this->_prepareTestMysql();
+		if ($di) {
+			$this->_testCacheDefaultDIBindings($di);
+		}
+		else {
+			$this->markTestSkipped("Skipped");
+		}
+	}
 
-		$config = new stdClass();
-		$config->cache = new stdClass();
-		$config->cache->adapter = 'File';
-		$config->cache->cacheDir = 'unit-tests/cache/';
+	public function testCacheDefaultDIBindingsPostgresql()
+	{
+		$di = $this->_prepareTestPostgresql();
+		if ($di) {
+			$this->_testCacheDefaultDIBindings($di);
+		}
+		else {
+			$this->markTestSkipped("Skipped");
+		}
+	}
 
-		$manager = new Phalcon_Model_Manager($config);
-		$manager->setModelsDir('unit-tests/models/');
+	public function testCacheDefaultDIBindingsSqlite()
+	{
+		$di = $this->_prepareTestSqlite();
+		if ($di) {
+			$this->_testCacheDefaultDIBindings($di);
+		}
+		else {
+			$this->markTestSkipped("Skipped");
+		}
+	}
 
-		$success = $manager->load('Robots');
-		$this->assertTrue($success);
+	public function testCacheOtherServiceMysql()
+	{
+		$di = $this->_prepareTestMysql();
+		if ($di) {
+			$this->_testCacheOtherService($di);
+		}
+		else {
+			$this->markTestSkipped("Skipped");
+		}
+	}
 
-		$this->assertInstanceOf('Phalcon_Cache_Backend_File', $manager->getCache());
+	public function testCacheOtherServicePostgresql()
+	{
+		$di = $this->_prepareTestPostgresql();
+		if ($di) {
+			$robots = $this->_testCacheOtherService($di);
+		}
+		else {
+			$this->markTestSkipped("Skipped");
+		}
+	}
 
-		$params = array('cache' => array('key' => 'mykey'), 'order' => 'id');
-
-		$robots = Robots::find($params);
-		$this->assertEquals(count($robots), 3);
-		$this->assertTrue($robots->isFresh());
-
-		$robots = Robots::find($params);
-		$this->assertEquals(count($robots), 3);
-		$this->assertFalse($robots->isFresh());
-
+	public function testCacheOtherServiceSqlite()
+	{
+		$di = $this->_prepareTestSqlite();
+		if ($di) {
+			$robots = $this->_testCacheOtherService($di);
+		}
+		else {
+			$this->markTestSkipped("Skipped");
+		}
 	}
 
 }

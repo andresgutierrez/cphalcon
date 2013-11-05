@@ -1,187 +1,202 @@
 <?php
 
 /*
-  +------------------------------------------------------------------------+
-  | Phalcon Framework                                                      |
-  +------------------------------------------------------------------------+
-  | Copyright (c) 2011-2012 Phalcon Team (http://www.phalconphp.com)       |
-  +------------------------------------------------------------------------+
-  | This source file is subject to the New BSD License that is bundled     |
-  | with this package in the file docs/LICENSE.txt.                        |
-  |                                                                        |
-  | If you did not receive a copy of the license and are unable to         |
-  | obtain it through the world-wide-web, please send an email             |
-  | to license@phalconphp.com so we can send you a copy immediately.       |
-  +------------------------------------------------------------------------+
-  | Authors: Andres Gutierrez <andres@phalconphp.com>                      |
-  |          Eduar Carvajal <eduar@phalconphp.com>                         |
-  +------------------------------------------------------------------------+
+	+------------------------------------------------------------------------+
+	| Phalcon Framework                                                      |
+	+------------------------------------------------------------------------+
+	| Copyright (c) 2011-2013 Phalcon Team (http://www.phalconphp.com)       |
+	+------------------------------------------------------------------------+
+	| This source file is subject to the New BSD License that is bundled     |
+	| with this package in the file docs/LICENSE.txt.                        |
+	|                                                                        |
+	| If you did not receive a copy of the license and are unable to         |
+	| obtain it through the world-wide-web, please send an email             |
+	| to license@phalconphp.com so we can send you a copy immediately.       |
+	+------------------------------------------------------------------------+
+	| Authors: Andres Gutierrez <andres@phalconphp.com>                      |
+	|          Eduar Carvajal <eduar@phalconphp.com>                         |
+	|          Vladimir Kolesnikov <vladimir@extrememember.com>              |
+	+------------------------------------------------------------------------+
 */
 
-class RequestTest extends PHPUnit_Framework_TestCase {
+class RequestTest extends PHPUnit_Framework_TestCase
+{
 
-	private $_request;
+	public function testHasFiles()
+	{
+		$request = new \Phalcon\Http\Request();
 
-	public function setUp(){
-		$this->_request = Phalcon_Request::getInstance();
+		$_FILES = array(
+			'test' => array(
+				'name'     => 'name',
+				'type'     => 'text/plain',
+				'size'     => 1,
+				'tmp_name' => 'tmp_name',
+				'error'    => 0,
+			)
+		);
+
+		$this->assertEquals($request->hasFiles(false), 1);
+		$this->assertEquals($request->hasFiles(true), 1);
+
+		$_FILES = array(
+			'test' => array(
+				'name'     => array('name1', 'name2'),
+				'type'     => array('text/plain', 'text/plain'),
+				'size'     => array(1, 1),
+				'tmp_name' => array('tmp_name1', 'tmp_name2'),
+				'error'    => array(0, 0),
+			)
+		);
+
+		$this->assertEquals($request->hasFiles(false), 2);
+		$this->assertEquals($request->hasFiles(true), 2);
+
+		$_FILES = array (
+			'photo' => array(
+				'name' => array(
+					0 => '',
+					1 => '',
+					2 => array(0 => '', 1 => '', 2 => ''),
+					3 => array(0 => ''),
+					4 => array(
+						0 => array(0 => ''),
+					),
+					5 => array(
+						0 => array(
+							0 => array(
+								0 => array(0 => ''),
+							),
+						),
+					),
+				),
+				'type' => array(
+					0 => '',
+					1 => '',
+					2 => array(0 => '', 1 => '', 2 => ''),
+					3 => array(0 => ''),
+					4 => array(
+						0 => array(0 => ''),
+					),
+					5 => array(
+						0 => array(
+							0 => array(
+								0 => array(0 => ''),
+							),
+						),
+					),
+				),
+				'tmp_name' => array(
+					0 => '',
+					1 => '',
+					2 => array(0 => '', 1 => '', 2 => ''),
+					3 => array(0 => ''),
+					4 => array(
+						0 => array(0 => ''),
+					),
+					5 => array(
+						0 => array(
+							0 => array(
+								0 => array(0 => ''),
+							),
+						),
+					),
+				),
+				'error' => array(
+					0 => 4,
+					1 => 4,
+					2 => array(0 => 4, 1 => 4, 2 => 4),
+					3 => array(0 => 4),
+					4 => array(
+						0 => array(0 => 4),
+					),
+					5 => array(
+						0 => array(
+							0 => array(
+								0 => array(0 => 4),
+							),
+						),
+					),
+				),
+				'size' => array(
+					0 => 0,
+					1 => 0,
+					2 => array(0 => 0, 1 => 0, 2 => 0),
+					3 => array(0 => 0),
+					4 => array(
+						0 => array(0 => 0),
+					),
+					5 => array(
+						0 => array(
+							0 => array(
+								0 => array(0 => 0),
+							),
+						),
+					),
+				),
+			),
+			'test' => array(
+				'name' => '',
+				'type' => '',
+				'tmp_name' => '',
+				'error' => 4,
+				'size' => 0,
+			),
+		);
+
+		$this->assertEquals($request->hasFiles(false), 9);
+		$this->assertEquals($request->hasFiles(true), 0);
 	}
 
-	public function testInstanceOf(){
-		$this->assertInstanceOf('Phalcon_Request', $this->_request);
+	public function testGetUploadedFiles()
+	{
+		$request = new \Phalcon\Http\Request();
+
+		$_FILES = array (
+			'photo' => array(
+				'name' => array(0 => 'f0', 1 => 'f1', 2 => array(0 => 'f2', 1 => 'f3'), 3 => array(0 => array(0 => array(0 => array(0 => 'f4'))))),
+				'type' => array(0 => 'text/plain', 1 => 'text/csv', 2 => array(0 => 'image/png', 1 => 'image/gif'), 3 => array(0 => array(0 => array(0 => array(0 => 'application/octet-stream'))))),
+				'tmp_name' => array(0 => 't0', 1 => 't1', 2 => array(0 => 't2', 1 => 't3'), 3 => array(0 => array(0 => array(0 => array(0 => 't4'))))),
+				'error' => array(0 => 0, 1 => 0, 2 => array(0 => 0, 1 => 0), 3 => array(0 => array(0 => array(0 => array(0 => 8))))),
+				'size' => array(0 => 10, 1 => 20, 2 => array(0 => 30, 1 => 40), 3 => array(0 => array(0 => array(0 => array(0 => 50))))),
+			),
+		);
+
+		$all        = $request->getUploadedFiles(false);
+		$successful = $request->getUploadedFiles(true);
+
+		$this->assertEquals(count($all), 5);
+		$this->assertEquals(count($successful), 4);
+
+		for ($i=0; $i<=4; ++$i) {
+			$this->assertFalse($all[$i]->isUploadedFile());
+		}
+
+		$keys = array('photo.0', 'photo.1', 'photo.2.0', 'photo.2.1', 'photo.3.0.0.0.0');
+		for ($i=0; $i<=4; ++$i) {
+			$this->assertEquals($all[$i]->getKey(), $keys[$i]);
+		}
+
+		$this->assertEquals($all[0]->getName(), 'f0');
+		$this->assertEquals($all[1]->getName(), 'f1');
+		$this->assertEquals($all[2]->getName(), 'f2');
+		$this->assertEquals($all[3]->getName(), 'f3');
+		$this->assertEquals($all[4]->getName(), 'f4');
+
+		$this->assertEquals($all[0]->getTempName(), 't0');
+		$this->assertEquals($all[1]->getTempName(), 't1');
+		$this->assertEquals($all[2]->getTempName(), 't2');
+		$this->assertEquals($all[3]->getTempName(), 't3');
+		$this->assertEquals($all[4]->getTempName(), 't4');
+
+		$this->assertEquals($successful[0]->getName(), 'f0');
+		$this->assertEquals($successful[1]->getName(), 'f1');
+		$this->assertEquals($successful[2]->getName(), 'f2');
+		$this->assertEquals($successful[3]->getName(), 'f3');
+
+		$this->assertEquals($successful[0]->getTempName(), 't0');
+		$this->assertEquals($successful[1]->getTempName(), 't1');
+		$this->assertEquals($successful[2]->getTempName(), 't2');
+		$this->assertEquals($successful[3]->getTempName(), 't3');
 	}
-
-	public function testInput(){
-
-		$value = $this->_request->getPost('lol');
-		$this->assertEquals($value, '');
-
-		$_POST['test'] = 1;
-		$value = $this->_request->getPost('test');
-		$this->assertEquals($value, 1);
-
-		$_POST['test'] = "lol<";
-		$value = $this->_request->getPost('test', 'string');
-		$this->assertEquals($value, 'lol');
-
-		$_POST['test'] = "lol<";
-		$value = $this->_request->getPost('test', array('string'));
-		$this->assertEquals($value, 'lol');
-
-	}
-
-	public function testHeader(){
-
-		$header = $this->_request->getHeader('LOL');
-		$this->assertEquals($header, '');
-
-		$_SERVER['HTTP_LOL'] = 'zup';
-		$header = $this->_request->getHeader('LOL');
-		$this->assertEquals($header, 'zup');
-
-	}
-
-	public function testIsAjax(){
-
-		$isAjax = $this->_request->isAjax();
-		$this->assertFalse($isAjax);
-
-		$_SERVER['HTTP_X_REQUESTED_WITH'] = 'XMLHttpRequest';
-		$isAjax = $this->_request->isAjax();
-		$this->assertTrue($isAjax);
-
-	}
-
-	public function testScheme(){
-
-		$this->assertEquals($this->_request->getScheme(), 'http');
-
-		$_SERVER['HTTP_HTTPS'] = 'on';
-		$this->assertEquals($this->_request->getScheme(), 'https');
-
-	}
-
-	public function testIsSecureRequest(){
-		$_SERVER['HTTP_HTTPS'] = 'on';
-		$this->assertTrue($this->_request->isSecureRequest());
-	}
-
-
-	public function testServerAddress(){
-
-		$this->assertEquals($this->_request->getServerAddress(), '127.0.0.1');
-
-		$_SERVER['SERVER_ADDR'] = '192.168.0.1';
-		$this->assertEquals($this->_request->getServerAddress(), '192.168.0.1');
-	}
-
-	public function testHttpHost(){
-
-		$_SERVER['HTTP_HTTPS'] = 'off';
-		$_SERVER['HTTP_SERVER_NAME'] = 'localhost';
-		$_SERVER['HTTP_SERVER_PORT'] = 80;
-		$this->assertEquals($this->_request->getHttpHost(), 'localhost');
-
-		$_SERVER['HTTP_HTTPS'] = 'on';
-		$_SERVER['HTTP_SERVER_NAME'] = 'localhost';
-		$_SERVER['HTTP_SERVER_PORT'] = 80;
-		$this->assertEquals($this->_request->getHttpHost(), 'localhost:80');
-
-		$_SERVER['HTTP_HTTPS'] = 'on';
-		$_SERVER['HTTP_SERVER_NAME'] = 'localhost';
-		$_SERVER['HTTP_SERVER_PORT'] = 443;
-		$this->assertEquals($this->_request->getHttpHost(), 'localhost');
-
-	}
-
-	public function testMethod(){
-
-		$_SERVER['REQUEST_METHOD'] = 'POST';
-		$this->assertEquals($this->_request->getMethod(), 'POST');
-		$this->assertTrue($this->_request->isPost());
-		$this->assertFalse($this->_request->isGet());
-
-		$_SERVER['REQUEST_METHOD'] = 'GET';
-		$this->assertEquals($this->_request->getMethod(), 'GET');
-		$this->assertTrue($this->_request->isGet());
-		$this->assertFalse($this->_request->isPost());
-
-	}
-
-	public function testAcceptableContent(){
-
-		$_SERVER['HTTP_ACCEPT'] = 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8';
-		$accept = $this->_request->getAcceptableContent();
-		$this->assertEquals(count($accept), 4);
-
-		//var_dump($accept);
-
-		$firstAccept = $accept[0];
-		$this->assertEquals($firstAccept['accept'], 'text/html');
-		$this->assertEquals($firstAccept['quality'], 1);
-
-		$lastAccept = $accept[3];
-		$this->assertEquals($lastAccept['accept'], '*/*');
-		$this->assertEquals($lastAccept['quality'], 0.8);
-
-		$this->assertEquals($this->_request->getBestAccept(), 'text/html');
-
-	}
-
-	public function testAcceptableCharsets(){
-
-		$_SERVER['HTTP_ACCEPT_CHARSET'] = 'iso-8859-5,unicode-1-1;q=0.8';
-		$accept = $this->_request->getClientCharsets();
-		$this->assertEquals(count($accept), 2);
-
-		$firstAccept = $accept[0];
-		$this->assertEquals($firstAccept['charset'], 'iso-8859-5');
-		$this->assertEquals($firstAccept['quality'], 1);
-
-		$lastAccept = $accept[1];
-		$this->assertEquals($lastAccept['charset'], 'unicode-1-1');
-		$this->assertEquals($lastAccept['quality'], 0.8);
-
-		$this->assertEquals($this->_request->getBestCharset(), 'iso-8859-5');
-
-	}
-
-	public function testAcceptableLanguage(){
-
-		$_SERVER['HTTP_ACCEPT_LANGUAGE'] = 'es,es-ar;q=0.8,en;q=0.5,en-us;q=0.3';
-		$accept = $this->_request->getLanguages();
-		$this->assertEquals(count($accept), 4);
-
-		$firstAccept = $accept[0];
-		$this->assertEquals($firstAccept['language'], 'es');
-		$this->assertEquals($firstAccept['quality'], 1);
-
-		$lastAccept = $accept[3];
-		$this->assertEquals($lastAccept['language'], 'en-us');
-		$this->assertEquals($lastAccept['quality'], 0.3);
-
-		$this->assertEquals($this->_request->getBestLanguage(), 'es');
-
-	}
-
-
 }

@@ -18,47 +18,117 @@
   +------------------------------------------------------------------------+
 */
 
-class DbProfiler extends Phalcon_Db_Profiler {
+class DbProfiler extends Phalcon\Db\Profiler
+{
 
 	private $_points = 0;
 
-	public function beforeStartProfile($profile){
+	public function beforeStartProfile($profile)
+	{
 		$this->_points++;
 	}
 
-	public function afterEndProfile($profile){
+	public function afterEndProfile($profile)
+	{
 		$this->_points--;
 	}
 
-	public function getPoints(){
+	public function getPoints()
+	{
 		return $this->_points;
 	}
 
 }
 
-class DbProfilerTest extends PHPUnit_Framework_TestCase {
+class DbProfilerListener
+{
 
-	public function testDb(){
+	protected $_profiler;
 
-		$config = new stdClass();
-		$config->host = '127.0.0.1';
-		$config->username = 'root';
-		$config->password = '';
-		$config->name = 'phalcon_test';
+	public function __construct(){
+		$this->_profiler = new DbProfiler();
+	}
 
-		$connection = Phalcon_Db::factory('Mysql', $config);
-		$this->assertTrue(is_object($connection));
+	public function beforeQuery($event, $connection)
+	{
+		 $this->_profiler->startProfile($connection->getSQLStatement());
+	}
 
-		$profiler = new DbProfiler();
+	public function afterQuery($event, $connection)
+	{
+		$this->_profiler->stopProfile();
+	}
 
-		$connection->setProfiler($profiler);
+	public function getProfiler(){
+		return $this->_profiler;
+	}
+
+}
+
+class DbProfilerTest extends PHPUnit_Framework_TestCase
+{
+
+	public function testDbMysql()
+	{
+
+		require 'unit-tests/config.db.php';
+		if (empty($configMysql)) {
+			$this->markTestSkipped("Skipped");
+			return;
+		}
+
+		$connection = new Phalcon\Db\Adapter\Pdo\Mysql($configMysql);
+
+		$this->_executeTests($connection);
+	}
+
+	public function testDbPostgresql()
+	{
+
+		require 'unit-tests/config.db.php';
+		if (empty($configPostgresql)) {
+			$this->markTestSkipped("Skipped");
+			return;
+		}
+
+		$connection = new Phalcon\Db\Adapter\Pdo\Postgresql($configPostgresql);
+
+		$this->_executeTests($connection);
+	}
+
+	public function testDbSqlite()
+	{
+
+		require 'unit-tests/config.db.php';
+		if (empty($configSqlite)) {
+			$this->markTestSkipped("Skipped");
+			return;
+		}
+
+		$connection = new Phalcon\Db\Adapter\Pdo\Sqlite($configSqlite);
+
+		$this->_executeTests($connection);
+	}
+
+	public function _executeTests($connection)
+	{
+
+		$eventsManager = new Phalcon\Events\Manager();
+
+		$listener = new DbProfilerListener();
+
+		$eventsManager->attach('db', $listener);
+
+		$connection->setEventsManager($eventsManager);
 
 		$connection->query("SELECT * FROM personas LIMIT 3");
+
+		$profiler = $listener->getProfiler();
 
 		$this->assertEquals($profiler->getNumberTotalStatements(), 1);
 
 		$profile = $profiler->getLastProfile();
-		$this->assertEquals(get_class($profile), 'Phalcon_Db_Profiler_Item');
+		$this->assertEquals(get_class($profile), 'Phalcon\Db\Profiler\Item');
 
 		$this->assertEquals($profile->getSQLStatement(), "SELECT * FROM personas LIMIT 3");
 		$this->assertEquals(gettype($profile->getInitialTime()), "double");
@@ -71,10 +141,10 @@ class DbProfilerTest extends PHPUnit_Framework_TestCase {
 		$this->assertEquals($profiler->getNumberTotalStatements(), 2);
 
 		$profile = $profiler->getLastProfile();
-		$this->assertEquals(get_class($profile), 'Phalcon_Db_Profiler_Item');
+		$this->assertEquals(get_class($profile), 'Phalcon\Db\Profiler\Item');
 
 		$this->assertEquals($profile->getSQLStatement(), "SELECT * FROM personas LIMIT 100");
-		$this->assertTrue($profile->getFinalTime()>$profile->getInitialTime());
+		$this->assertTrue($profile->getFinalTime() > $profile->getInitialTime());
 
 		$connection->query("SELECT * FROM personas LIMIT 5");
 		$connection->query("SELECT * FROM personas LIMIT 10");
@@ -89,7 +159,6 @@ class DbProfilerTest extends PHPUnit_Framework_TestCase {
 
 		$this->assertEquals(count($profiler->getProfiles()), 0);
 		$this->assertEquals($profiler->getNumberTotalStatements(), 0);
-
 	}
 
 }
